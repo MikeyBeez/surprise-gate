@@ -1,6 +1,6 @@
 import os, sys, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from values import key, numbers, recovers, same, tidy
+from values import abstains, key, numbers, recovers, same, tidy
 
 
 class Tidy(unittest.TestCase):
@@ -152,3 +152,15 @@ class Recovers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class Abstains(unittest.TestCase):
+    def test_refusals(self):
+        for s in ("Unknown", "not found", "N/A", "I don't know.", "404",
+                  "Cannot determine", "**None**", "not specified"):
+            self.assertTrue(abstains(s), s)
+
+    def test_answers_are_not_refusals(self):
+        for s in ("Paris", "42", "merged", "the unknown soldier",
+                  "none of the above is 3"):
+            self.assertFalse(abstains(s), s)

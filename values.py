@@ -52,6 +52,25 @@ def _contains_word(haystack: str, needle: str) -> bool:
                      haystack) is not None
 
 
+# Replies that decline rather than answer. These are a CLEANER "does not know"
+# signal than scatter -- eight refusals agree with each other perfectly, and
+# without this check that agreement is scored as a confident WRONG answer,
+# which is the one verdict this system exists to find. The WHOLE reply must be
+# the refusal: "unknown" abstains, "none of the above is 3" does not. Missing
+# a wordy refusal only falls back to the old labels, so tight is the cheap
+# direction.
+_ABSTAIN = re.compile(
+    r"^(unknown|not known|none|n/?a|no idea|not found|404|not available|"
+    r"i (do not|don't) know|cannot (determine|say|answer)|"
+    r"(i am|i'm) not sure|unsure|no data|insufficient (data|information)|"
+    r"not (applicable|specified|determined|provided))$")
+
+
+def abstains(s: str) -> bool:
+    """Did the reply decline to answer rather than give a value?"""
+    return _ABSTAIN.match(tidy(s)) is not None
+
+
 def items(s: str) -> list:
     """Split a list-shaped answer into its parts. Not a list -> one part."""
     parts = re.split(r",|\band\b|;|/", tidy(s))

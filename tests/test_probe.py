@@ -29,6 +29,26 @@ class Verdicts(unittest.TestCase):
         self.assertEqual(r["reason"], "model-is-confidently-wrong")
         self.assertEqual(r["mode"], "28")
 
+    def test_abstention_is_stored_with_its_own_label(self):
+        # "unknown" 8/8 is perfect self-agreement. Before this label existed it
+        # was filed as confidently-wrong -- the one reason worth reading.
+        r = probe("merge status of PR 27342?", "unmerged", n=8,
+                  chat_fn=scripted(["Unknown"]))
+        self.assertEqual(r["verdict"], "store")
+        self.assertEqual(r["reason"], "model-admits-not-knowing")
+        self.assertEqual(r["abstain_rate"], 1.0)
+
+    def test_abstention_does_not_hide_a_hit(self):
+        # Our answer really is "unknown": the model agreeing is a hit, not an
+        # abstention. The hit check runs first.
+        r = probe("q", "unknown", n=8, chat_fn=scripted(["unknown"]))
+        self.assertEqual(r["verdict"], "skip")
+
+    def test_mixed_abstention_below_line_is_scatter(self):
+        r = probe("q", "42", n=8, chat_fn=scripted(
+            ["unknown", "unknown", "28", "30", "31", "n/a", "29", "27"]))
+        self.assertEqual(r["reason"], "model-has-no-stable-view")
+
     def test_scattered_is_stored(self):
         r = probe("q", "Rust", n=6,
                   chat_fn=scripted(["Python", "C", "Go", "Lisp", "Perl", "Zig"]))

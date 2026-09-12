@@ -26,11 +26,15 @@ Known facts pin at 8/8 and unknown ones scatter, so the 0.625 line sits in
 open space rather than on top of the data. ~2.7s per fact at n=8, which is why
 this runs in a nightly batch and not in the inference path.
 
-TWO VERDICTS, NOT THREE. An early draft had a third for the scattered case,
+TWO VERDICTS, FOUR REASONS. An early draft had a third for the scattered case,
 calling it a weak retrieval key. The first live run killed it: a well-posed
 question about a private benchmark scattered exactly like a deliberately vague
 one. Separating those needs the open-book control in former.py, not this
-measurement, so this one does not pretend to.
+measurement, so this one does not pretend to. Abstention later got its
+own REASON, not a verdict: "unknown" eight times out of eight is perfect
+self-agreement, and the first real run would have filed that as
+confidently wrong -- the one label worth reading. Same verdict, honest
+label.
 
 FAIL-SAFE: a probe that cannot run returns store. Losing a real memory costs
 more than keeping a redundant one.
@@ -47,7 +51,7 @@ import os
 import time
 
 from llm import chat
-from values import key, same
+from values import abstains, key, same
 
 N = int(os.environ.get("SG_N", "8"))
 TEMP = float(os.environ.get("SG_TEMP", "0.8"))
@@ -82,11 +86,18 @@ def probe(question: str, answer: str, n=N, temp=TEMP, chat_fn=None) -> dict:
     agreement = mode_n / len(keys)
     hits = sum(1 for s in samples if same(s, answer))
     hit_rate = hits / len(samples)
+    abstains_n = sum(1 for s in samples if abstains(s))
+    abstain_rate = abstains_n / len(samples)
 
     if hit_rate >= KNOWN:
         verdict, reason = "skip", "already-in-the-weights"
         detail = (f"a clean context produced this answer {hits}/{len(samples)} "
                   f"times; retrievable from the generator")
+    elif abstain_rate >= CONSISTENT:
+        verdict, reason = "store", "model-admits-not-knowing"
+        detail = (f"a clean context declined to answer {abstains_n}/"
+                  f"{len(samples)} times; not retrievable, and not a "
+                  f"confident wrong answer either")
     elif agreement >= CONSISTENT:
         verdict, reason = "store", "model-is-confidently-wrong"
         detail = (f"a clean context reliably says {mode!r} "
@@ -100,6 +111,7 @@ def probe(question: str, answer: str, n=N, temp=TEMP, chat_fn=None) -> dict:
     return {"verdict": verdict, "reason": reason, "detail": detail,
             "question": question, "answer": answer,
             "hit_rate": round(hit_rate, 3),
+            "abstain_rate": round(abstain_rate, 3),
             "self_agreement": round(agreement, 3),
             "distinct": len(counts), "mode": mode, "n": len(samples),
             "samples": samples, "errors": errors[:3],

@@ -105,12 +105,18 @@ which is most of the saving on a messy day.
 
 ## Usage
 
-While working — one line, microseconds, never throws:
+While working — one line, microseconds, never throws. Spool generously; it's
+the gate's job to throw things away, not yours:
 
 ```python
-from spool import Spool
-Spool().add("DFlash2 reached 117 tokens/sec on code prompts on the 5070 Ti",
-            source="benchmark-run-12")
+from record import note
+note("DFlash2 reached 117 tokens/sec on code prompts", source="bench-12")
+```
+
+Or from a shell, which is how a finished job or a protocol records one:
+
+```sh
+python3 record.py "llama.cpp PR 27342 adds DFlash2 support" --source pr-watch
 ```
 
 Later, when the card is free:
@@ -132,11 +138,35 @@ A real pass, 7 findings spooled:
       KEEP  model-has-no-stable-view   Which llama.cpp pull request number adds DFlash2... = 27342
     {"spooled": 7, "unique": 5, "kept": 3, "redundant": 2, "seconds": 28.72}
 
-Nightly, on a machine with the model on it:
+### Nightly
+
+`nightly.sh` is the cron entry point. It adds two things a bare
+`consolidate.py` doesn't have:
 
 ```
-17 3 * * *  cd /path/to/surprise-gate && python3 consolidate.py >> ~/.surprise-gate/consolidate.log 2>&1
+17 3 * * *  /path/to/surprise-gate/nightly.sh
 ```
+
+A **lock** (mkdir, atomic) so a slow pass can't overlap the next night's and
+probe the same spool twice.
+
+A **GPU check on utilisation, not memory**. The first version of that script
+checked `memory.used` and would have skipped every single night: a resident
+`llama-server` holds about 15.8 of 16 GiB permanently, so by that measure the
+card is never free. What matters is whether anything is *running*. Three
+readings three seconds apart, because one sample catches an idle instant in the
+middle of a busy run. Skips above 25% peak; `SG_FORCE=1` runs anyway.
+
+A real night, seeded with three findings, two of them identical:
+
+    2026-09-11T23:15:48-05:00 GPU idle (peak 0%)
+    2026-09-11T23:15:48-05:00 start
+    2026-09-09: 3 spooled, 2 unique after dedupe
+      DROP  redundant    What is the capital of France?  hit=1.0
+      KEEP  model-has-no-stable-view   What is the optimal number of seagulls in a flock? = 42
+    2026-09-09: spool cleared
+    {"spooled": 3, "unique": 2, "kept": 1, "redundant": 1, "seconds": 10.8}
+    2026-09-11T23:15:59-05:00 done
 
 ## Two verdicts, not three
 
@@ -166,6 +196,9 @@ the weights and can go. Memory that shrinks as the model grows.
 | `SG_CONSISTENT` | `0.625` | self-agreement at or above which the model has a view |
 | `SG_KEEP_DROPPED` | unset | keep full text of dropped facts (debugging the gate) |
 | `SG_TIMEOUT` | `120` | seconds per request |
+| `SG_BUSY_PCT` | `25` | nightly.sh skips above this GPU utilisation |
+| `SG_FORCE` | unset | `1` makes nightly.sh ignore the GPU check |
+| `SG_LOGDIR` | `~/.surprise-gate` | nightly.sh log and lock |
 
 Two request flags are load-bearing, not cosmetic. `cache_prompt: false`, or one
 sample primes the next and N draws stop being independent. And

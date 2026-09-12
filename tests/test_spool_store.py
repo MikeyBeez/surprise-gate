@@ -44,6 +44,53 @@ class SpoolTests(unittest.TestCase):
         self.assertEqual(self.s.days(), ["2026-09-11"])
 
 
+class WorkingDay(unittest.TestCase):
+    """A night owl'"'"'s session must not be split down the middle."""
+
+    def setUp(self):
+        import spool
+        self.spool = spool
+        self.saved = spool.CUTOFF_HOUR
+
+    def tearDown(self):
+        self.spool.CUTOFF_HOUR = self.saved
+
+    def at(self, y, m, d, hh, cutoff=5):
+        import datetime
+        self.spool.CUTOFF_HOUR = cutoff
+        real = datetime.datetime
+
+        class Fixed(real):
+            @classmethod
+            def now(cls, tz=None):
+                return real(y, m, d, hh, 30)
+        datetime.datetime = Fixed
+        try:
+            return self.spool.today()
+        finally:
+            datetime.datetime = real
+
+    def test_evening_is_its_own_day(self):
+        self.assertEqual(self.at(2026, 9, 11, 22), "2026-09-11")
+
+    def test_after_midnight_belongs_to_the_night_before(self):
+        self.assertEqual(self.at(2026, 9, 12, 2), "2026-09-11")
+
+    def test_the_cutoff_hour_itself_is_the_new_day(self):
+        self.assertEqual(self.at(2026, 9, 12, 5), "2026-09-12")
+
+    def test_morning_is_the_new_day(self):
+        self.assertEqual(self.at(2026, 9, 12, 9), "2026-09-12")
+
+    def test_a_zero_cutoff_is_the_plain_calendar_date(self):
+        self.assertEqual(self.at(2026, 9, 12, 2, cutoff=0), "2026-09-12")
+
+    def test_a_whole_session_lands_in_one_file(self):
+        span = [self.at(2026, 9, 11, h) for h in (21, 23)]
+        span += [self.at(2026, 9, 12, h) for h in (0, 3)]
+        self.assertEqual(set(span), {"2026-09-11"})
+
+
 class StoreTests(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()

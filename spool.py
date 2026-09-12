@@ -20,9 +20,26 @@ import os
 
 DIR = os.path.expanduser(os.environ.get("SG_DIR", "~/.surprise-gate"))
 
+# The day rolls over at 5am, not midnight, and that is not a detail.
+#
+# A working session that runs from 10pm to 3am is ONE session. Under a
+# calendar day it lands in two spool files, split at an arbitrary point in the
+# middle of the work, and the half after midnight is not eligible for
+# consolidation until a full day later. Worse, a consolidation job scheduled
+# for the small hours would be sitting INSIDE the night it is supposed to be
+# tidying up, looking at a file that is still being written.
+#
+# So: anything before the cutoff belongs to the previous date. Pick a cutoff
+# after you stop working and before the job runs.
+CUTOFF_HOUR = int(os.environ.get("SG_DAY_CUTOFF", "5"))
+
 
 def today() -> str:
-    return datetime.date.today().isoformat()
+    """The current WORKING day, which is not always the calendar date."""
+    now = datetime.datetime.now()
+    if now.hour < CUTOFF_HOUR:
+        now -= datetime.timedelta(days=1)
+    return now.date().isoformat()
 
 
 class Spool:

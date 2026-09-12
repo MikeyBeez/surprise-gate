@@ -138,13 +138,29 @@ A real pass, 7 findings spooled:
       KEEP  model-has-no-stable-view   Which llama.cpp pull request number adds DFlash2... = 27342
     {"spooled": 7, "unique": 5, "kept": 3, "redundant": 2, "seconds": 28.72}
 
+### The day boundary
+
+The day rolls over at 5am, not midnight, and that isn't a detail.
+
+A session that runs from 10pm to 3am is one session. On a calendar day it
+lands in two spool files, split at an arbitrary point in the middle of the
+work, and the half after midnight isn't eligible for consolidation until a
+full day later. Worse, a job scheduled for the small hours would be sitting
+*inside* the night it's meant to be tidying, reading a file still being
+written.
+
+So anything before `SG_DAY_CUTOFF` (default 5) belongs to the previous date.
+Pick a cutoff after you stop working and before the job runs — and make sure
+the cron time is *after* the cutoff, or the job will never see the night that
+just happened.
+
 ### Nightly
 
 `nightly.sh` is the cron entry point. It adds two things a bare
 `consolidate.py` doesn't have:
 
 ```
-17 3 * * *  /path/to/surprise-gate/nightly.sh
+17 6 * * *  /path/to/surprise-gate/nightly.sh
 ```
 
 A **lock** (mkdir, atomic) so a slow pass can't overlap the next night's and
@@ -199,6 +215,7 @@ the weights and can go. Memory that shrinks as the model grows.
 | `SG_BUSY_PCT` | `25` | nightly.sh skips above this GPU utilisation |
 | `SG_FORCE` | unset | `1` makes nightly.sh ignore the GPU check |
 | `SG_LOGDIR` | `~/.surprise-gate` | nightly.sh log and lock |
+| `SG_DAY_CUTOFF` | `5` | hour the working day rolls over; 0 for calendar days |
 
 Two request flags are load-bearing, not cosmetic. `cache_prompt: false`, or one
 sample primes the next and N draws stop being independent. And
@@ -218,5 +235,5 @@ keeping a redundant one.
 
     tests/run_all.sh
 
-72 tests. Every one stubs the model, so the suite needs no GPU and no server —
+78 tests. Every one stubs the model, so the suite needs no GPU and no server —
 what's tested is the decision, not the network.

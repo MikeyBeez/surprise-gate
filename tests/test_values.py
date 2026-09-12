@@ -50,6 +50,74 @@ class Same(unittest.TestCase):
         self.assertFalse(same("0", "5"))
 
 
+class Negation(unittest.TestCase):
+    """The failure that cost the most. Asked the merge status of a pull
+    request the model answered "Merged" 8/8; the truth was "unmerged". Plain
+    substring containment made that a HIT, so the gate concluded the model
+    already knew and threw away the best kind of memory there is -- one where
+    the model is confidently and exactly wrong."""
+
+    def test_merged_is_not_unmerged(self):
+        self.assertFalse(same("Merged", "unmerged"))
+
+    def test_merged_is_still_merged(self):
+        self.assertTrue(same("Merged", "merged"))
+
+    def test_other_negations(self):
+        for a, b in (("stable", "unstable"), ("secure", "insecure"),
+                     ("possible", "impossible"), ("legal", "illegal"),
+                     ("regular", "irregular"), ("agree", "disagree")):
+            self.assertFalse(same(a, b), f"{a!r} must not match {b!r}")
+
+    def test_word_boundary_not_mere_prefix(self):
+        self.assertFalse(same("cat", "category"))
+        self.assertTrue(same("cat", "the cat sat"))
+
+
+class Lists(unittest.TestCase):
+    """An answer that is a list is a set. The real reply differed from the
+    stored answer by one conjunction and exact containment failed 6/6."""
+
+    ANSWER = "edit_line, insert_lines, patch and rewrite_function"
+
+    def test_commas_instead_of_and(self):
+        ok, why = recovers("edit_line, insert_lines, patch, rewrite_function",
+                           self.ANSWER)
+        self.assertTrue(ok); self.assertEqual(why, "list")
+
+    def test_any_order(self):
+        ok, _ = recovers("patch, rewrite_function, edit_line, insert_lines",
+                         self.ANSWER)
+        self.assertTrue(ok)
+
+    def test_a_missing_item_is_caught(self):
+        ok, why = recovers("edit_line, insert_lines, patch", self.ANSWER)
+        self.assertFalse(ok); self.assertTrue(why.startswith("missing:"))
+
+    def test_same_stays_conservative_about_lists(self):
+        # same() does NOT do set logic, on purpose: a comma does not reliably
+        # mean a list ("Paris, France" is one answer). A false hit here throws
+        # a fact away; a false miss only stores one that did not need storing.
+        # So reordered lists read as a miss, and that is the safe direction.
+        self.assertFalse(same("patch, edit_line", "edit_line and patch"))
+        self.assertTrue(same("Paris, France", "Paris"))
+
+
+class Identifiers(unittest.TestCase):
+    """Underscores are markdown emphasis only when they wrap a word. This
+    system is mostly told about code, so identifiers must survive."""
+
+    def test_internal_underscores_survive(self):
+        self.assertEqual(tidy("reasoning_content"), "reasoning_content")
+        self.assertEqual(tidy("mutating_tool_names"), "mutating_tool_names")
+
+    def test_wrapping_underscores_are_emphasis(self):
+        self.assertEqual(tidy("_important_"), "important")
+
+    def test_two_identifiers_do_not_collide(self):
+        self.assertNotEqual(tidy("a_b"), tidy("ab"))
+
+
 class Recovers(unittest.TestCase):
     """The strict matcher. Every case here is a real reply measured on pop."""
 
